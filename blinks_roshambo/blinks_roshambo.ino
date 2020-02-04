@@ -53,10 +53,29 @@ byte results[] = {
   RESULT_FACE_LONELY,
   RESULT_FACE_LONELY
 };
+byte infos[] = {0,0,0,0,0,0};
 byte mode = MODE_TEAM_SELECT;
 byte team_index = 0;
 byte piece_type_index = 0;
 
+/*
+// Another way of "bit manipulation" but due to point/address stuff
+// and a few extra lines of code... the macro bit manipulation seems
+// easier to maintain.
+typedef struct {
+  byte team: 3;
+  byte piece: 2;
+} type_data;
+type_data received_datas[] = {0,0,0,0,0,0};
+type_data sent_data = {
+  team: team_index,
+  piece: piece_type_index
+};
+setValueSentOnAllFaces( (byte*)&sent_data );
+*/
+#define INFO_BUILD(TEAM,PIECE) ((TEAM<<2)|PIECE)
+#define INFO_GET_TEAM( INFO ) ((INFO&0b00011100)>>2)
+#define INFO_GET_PIECE( INFO ) (INFO&0b00000011)
 
 /**
  * Initialization
@@ -131,15 +150,16 @@ void loop_mode_piece_select(){
   }
 }
 void loop_mode_board(){
-  setValueSentOnAllFaces( values[piece_type_index] );
+  setValueSentOnAllFaces( INFO_BUILD( team_index, values[piece_type_index] ) );
   FOREACH_FACE(f){
-    byte otherValue = getLastValueReceivedOnFace(f);
+    byte info = getLastValueReceivedOnFace(f);
     if( ! isValueReceivedOnFaceExpired(f) ){
-      results[f] = result_lookup( values[piece_type_index], otherValue );
+      infos[f] = info;
+      results[f] = result_lookup( values[piece_type_index], values[INFO_GET_PIECE(info)] );
     }else{
       results[f] = RESULT_FACE_LONELY;
     }
-    result_draw( results[f], f );
+    result_draw( results[f], INFO_GET_TEAM(info), f );
   }
 
   if( buttonLongPressed() ){
@@ -173,13 +193,13 @@ void loop() {
 /**
  * Given a result and a face, light the appropriate color on that face.
  */
-void result_draw( byte result, byte face ){
+void result_draw( byte result, byte other_team, byte face ){
   if( result == RESULT_FACE_WON ){
     setColorOnFace( dim( TEAM_COLORS[team_index], BRIGHTNESS_WON ), face );
   }else if( result == RESULT_FACE_LOST ){
-    setColorOnFace( dim( TEAM_COLORS[team_index], BRIGHTNESS_LOST ), face );
+    setColorOnFace( dim( TEAM_COLORS[other_team], BRIGHTNESS_WON ), face );
   }else if( result == RESULT_FACE_TIE ){
-    setColorOnFace( dim( TEAM_COLORS[team_index], BRIGHTNESS_TIE ), face );
+    setColorOnFace( dim( TEAM_COLORS[team_index], BRIGHTNESS_WON ), face );
   }else{
     setColorOnFace( dim( TEAM_COLORS[team_index], BRIGHTNESS_LONELY ), face );
   }
