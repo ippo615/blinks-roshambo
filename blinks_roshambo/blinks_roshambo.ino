@@ -13,7 +13,9 @@
 Color TEAM_COLORS[] = {
   RED,BLUE,YELLOW,MAGENTA,GREEN,ORANGE,CYAN
 };
+Color COLOR_SELF_WIN_LOSE = WHITE;
 #define BRIGHTNESS_WON 255
+#define BRIGHTNESS_SELF 128
 #define BRIGHTNESS_LOST 0
 #define BRIGHTNESS_TIE 32
 #define BRIGHTNESS_LONELY 0
@@ -159,7 +161,7 @@ void loop_mode_board(){
     }else{
       results[f] = RESULT_FACE_LONELY;
     }
-    result_draw( results[f], INFO_GET_TEAM(info), f );
+    result_draw( results[f], INFO_GET_TEAM(info), team_index, f );
   }
 
   if( buttonLongPressed() ){
@@ -193,11 +195,19 @@ void loop() {
 /**
  * Given a result and a face, light the appropriate color on that face.
  */
-void result_draw( byte result, byte other_team, byte face ){
+void result_draw( byte result, byte other_team, byte this_team, byte face ){
   if( result == RESULT_FACE_WON ){
-    setColorOnFace( dim( TEAM_COLORS[team_index], BRIGHTNESS_WON ), face );
+    if( other_team == this_team ){
+      setColorOnFace( dim( COLOR_SELF_WIN_LOSE, BRIGHTNESS_SELF ), face );
+    }else{
+      setColorOnFace( dim( TEAM_COLORS[team_index], BRIGHTNESS_WON ), face );
+    }
   }else if( result == RESULT_FACE_LOST ){
-    setColorOnFace( dim( TEAM_COLORS[other_team], BRIGHTNESS_WON ), face );
+    if( other_team == this_team ){
+      setColorOnFace( dim( COLOR_SELF_WIN_LOSE, BRIGHTNESS_SELF ), face );
+    }else{
+      setColorOnFace( dim( TEAM_COLORS[other_team], BRIGHTNESS_WON ), face );
+    }
   }else if( result == RESULT_FACE_TIE ){
     setColorOnFace( dim( TEAM_COLORS[team_index], BRIGHTNESS_WON ), face );
   }else{
