@@ -226,10 +226,11 @@ void loop_mode_board(){
     if( ! isValueReceivedOnFaceExpired(f) ){
       infos[f] = info;
       results[f] = result_lookup( values[piece_type_index], values[INFO_GET_PIECE(info)] );
+      result_draw( results[f], INFO_GET_TEAM(info), team_index, f );
     }else{
-      results[f] = RESULT_FACE_LONELY;
+      setColorOnFace( dim( TEAM_COLORS[team_index], BRIGHTNESS_LONELY ), f );
     }
-    result_draw( results[f], INFO_GET_TEAM(info), team_index, f );
+    
   }
 
   if( buttonLongPressed() ){
