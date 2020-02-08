@@ -38,6 +38,7 @@ enum {
   MODE_TEAM_SELECT,
   MODE_TEAM_PROPAGATE,
   MODE_PIECE_SELECT,
+  MODE_PIECE_SELECT_FEEDBACK,
   MODE_BOARD
 };
 
@@ -134,31 +135,31 @@ void loop_mode_piece_select(){
     piece_type_index = (piece_type_index + 1) % N_PIECE_TYPES;
   }
   if( PIECE_TYPES[piece_type_index] == ROCK ){
-    setColorOnFace( TEAM_COLORS[team_index], 0 );
-    setColorOnFace( TEAM_COLORS[team_index], 1 );
-    setColorOnFace( TEAM_COLORS[team_index], 2 );
-    setColorOnFace( TEAM_COLORS[team_index], 3 );
-    setColorOnFace( TEAM_COLORS[team_index], 4 );
-    setColorOnFace( OFF, 5 );
+    draw_shape_rock( TEAM_COLORS[team_index] );
   }else
   if( PIECE_TYPES[piece_type_index] == PAPER ){
-    setColorOnFace( OFF, 0 );
-    setColorOnFace( TEAM_COLORS[team_index], 1 );
-    setColorOnFace( TEAM_COLORS[team_index], 2 );
-    setColorOnFace( OFF, 3 );
-    setColorOnFace( TEAM_COLORS[team_index], 4 );
-    setColorOnFace( TEAM_COLORS[team_index], 5 );
+    draw_shape_paper( TEAM_COLORS[team_index] );
   }else
-  if( PIECE_TYPES[piece_type_index] == SCISSOR ){
-    setColorOnFace( TEAM_COLORS[team_index], 0 );
-    setColorOnFace( OFF, 1 );
-    setColorOnFace( TEAM_COLORS[team_index], 2 );
-    setColorOnFace( OFF, 3 );
-    setColorOnFace( TEAM_COLORS[team_index], 4 );
-    setColorOnFace( OFF, 5 );
+  if( PIECE_TYPES[piece_type_index] == SCISSOR )
+    draw_shape_scissor( TEAM_COLORS[team_index] );{
   }
-  if( buttonLongPressed()){
+  if( buttonLongPressed() ){
+    mode = MODE_PIECE_SELECT_FEEDBACK;
+    timerFeedbackAnimation.set(DURATION_FEEDBACK_MS);
+  }
+}
+void loop_mode_piece_select_feedback(){
+  if( timerFeedbackAnimation.isExpired() ){
     mode = MODE_BOARD;
+  }else{
+    byte piece = values[piece_type_index];
+    if( piece == ROCK ){
+      draw_animate_pulse_function( draw_shape_rock, TEAM_COLORS[team_index], timerFeedbackAnimation, DURATION_FEEDBACK_MS, 2 );
+    }else if( piece == PAPER ){
+      draw_animate_pulse_function( draw_shape_paper, TEAM_COLORS[team_index], timerFeedbackAnimation, DURATION_FEEDBACK_MS, 2 );
+    }else if( piece == SCISSOR ){
+      draw_animate_pulse_function( draw_shape_scissor, TEAM_COLORS[team_index], timerFeedbackAnimation, DURATION_FEEDBACK_MS, 2 );
+    }
   }
 }
 void loop_mode_board(){
@@ -196,6 +197,9 @@ void loop() {
   if( mode == MODE_PIECE_SELECT ){
     loop_mode_piece_select();
   }else
+  if( mode == MODE_PIECE_SELECT_FEEDBACK ){
+    loop_mode_piece_select_feedback();
+  }else
   if( mode == MODE_BOARD ){
     loop_mode_board();
   }
@@ -205,6 +209,34 @@ void loop() {
 void draw_animate_pulse( Color color, Timer timer, unsigned int duration, byte cycles ){
   byte pulseMapped = map(timer.getRemaining(), 0, duration, 0, 255*cycles);
   setColor( dim(color, sin8_C(pulseMapped)) );
+}
+void draw_animate_pulse_function( void *draw(Color), Color color, Timer timer, unsigned int duration, byte cycles ){
+  byte pulseMapped = map(timer.getRemaining(), 0, duration, 0, 255*cycles);
+  draw( dim(color, sin8_C(pulseMapped)) );
+}
+void draw_shape_rock( Color color ){
+  setColorOnFace( color, 0 );
+  setColorOnFace( color, 1 );
+  setColorOnFace( color, 2 );
+  setColorOnFace( color, 3 );
+  setColorOnFace( color, 4 );
+  setColorOnFace( OFF, 5 );
+}
+void draw_shape_paper( Color color ){
+  setColorOnFace( OFF, 0 );
+  setColorOnFace( color, 1 );
+  setColorOnFace( color, 2 );
+  setColorOnFace( OFF, 3 );
+  setColorOnFace( color, 4 );
+  setColorOnFace( color, 5 );
+}
+void draw_shape_scissor( Color color ){
+  setColorOnFace( color, 0 );
+  setColorOnFace( OFF, 1 );
+  setColorOnFace( color, 2 );
+  setColorOnFace( OFF, 3 );
+  setColorOnFace( color, 4 );
+  setColorOnFace( OFF, 5 );
 }
 
 /**
