@@ -39,11 +39,14 @@ enum {
   MODE_TEAM_PROPAGATE,
   MODE_PIECE_SELECT,
   MODE_PIECE_SELECT_FEEDBACK,
-  MODE_BOARD
+  MODE_BOARD,
+  MODE_BOARD_INFO
 };
 
 #define DURATION_FEEDBACK_MS 800
+#define DURATION_PIECE_INFO_MS 2000
 Timer timerFeedbackAnimation;
+
 
 
 #define RESULT_FACE_WON 0
@@ -178,8 +181,26 @@ void loop_mode_board(){
   if( buttonLongPressed() ){
     mode = MODE_START;
   }
-}
 
+  if( buttonSingleClicked() ){
+    mode = MODE_BOARD_INFO;
+    timerFeedbackAnimation.set(DURATION_PIECE_INFO_MS);
+  }
+}
+void loop_mode_board_info(){
+  if( timerFeedbackAnimation.isExpired() ){
+    mode = MODE_BOARD;
+  }else{
+    byte piece = values[piece_type_index];
+    if( piece == ROCK ){
+      draw_animate_pulse_function( draw_shape_rock, TEAM_COLORS[team_index], timerFeedbackAnimation, DURATION_PIECE_INFO_MS, 1 );
+    }else if( piece == PAPER ){
+      draw_animate_pulse_function( draw_shape_paper, TEAM_COLORS[team_index], timerFeedbackAnimation, DURATION_PIECE_INFO_MS, 1 );
+    }else if( piece == SCISSOR ){
+      draw_animate_pulse_function( draw_shape_scissor, TEAM_COLORS[team_index], timerFeedbackAnimation, DURATION_PIECE_INFO_MS, 1 );
+    }
+  }
+}
 /**
  * Main loop
  */
@@ -202,6 +223,9 @@ void loop() {
   }else
   if( mode == MODE_BOARD ){
     loop_mode_board();
+  }else
+  if( mode == MODE_BOARD_INFO ){
+    loop_mode_board_info();
   }
 
 }
@@ -212,6 +236,14 @@ void draw_animate_pulse( Color color, Timer timer, unsigned int duration, byte c
 }
 void draw_animate_pulse_function( void *draw(Color), Color color, Timer timer, unsigned int duration, byte cycles ){
   byte pulseMapped = map(timer.getRemaining(), 0, duration, 0, 255*cycles);
+  draw( dim(color, sin8_C(pulseMapped)) );
+}
+void draw_animate_fade_in_function( void *draw(Color), Color color, Timer timer, unsigned int duration ){
+  byte pulseMapped = map(timer.getRemaining(), 0, duration, 0, 128);
+  draw( dim(color, sin8_C(pulseMapped)) );
+}
+void draw_animate_fade_out_function( void *draw(Color), Color color, Timer timer, unsigned int duration ){
+  byte pulseMapped = map(timer.getRemaining(), 0, duration, 128, 0);
   draw( dim(color, sin8_C(pulseMapped)) );
 }
 void draw_shape_rock( Color color ){
