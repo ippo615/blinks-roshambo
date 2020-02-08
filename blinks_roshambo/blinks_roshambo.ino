@@ -33,11 +33,17 @@ enum {
 byte PIECE_TYPES[] = {ROCK,PAPER,SCISSOR};
 byte values[] = {ROCK,PAPER,SCISSOR};
 
-#define MODE_START 0
-#define MODE_TEAM_SELECT 1
-#define MODE_TEAM_PROPAGATE 2
-#define MODE_PIECE_SELECT 3
-#define MODE_BOARD 4
+enum {
+  MODE_START,
+  MODE_TEAM_SELECT,
+  MODE_TEAM_PROPAGATE,
+  MODE_PIECE_SELECT,
+  MODE_BOARD
+};
+
+#define DURATION_FEEDBACK_MS 800
+Timer timerFeedbackAnimation;
+
 
 #define RESULT_FACE_WON 0
 #define RESULT_FACE_LOST 1
@@ -102,6 +108,7 @@ void loop_mode_team_select(){
   setColor( TEAM_COLORS[team_index] );
   if( buttonLongPressed() ){
     mode = MODE_TEAM_PROPAGATE;
+    timerFeedbackAnimation.set(DURATION_FEEDBACK_MS);
   }
 
   /*
@@ -116,8 +123,11 @@ void loop_mode_team_select(){
   */
 }
 void loop_mode_team_propagate(){
-  //setValueSentOnAllFaces( team_index );
-  mode = MODE_PIECE_SELECT;
+  if( timerFeedbackAnimation.isExpired() ){
+    mode = MODE_PIECE_SELECT;
+  }else{
+    draw_animate_pulse( TEAM_COLORS[team_index], timerFeedbackAnimation, DURATION_FEEDBACK_MS, 2 );
+  }
 }
 void loop_mode_piece_select(){
   if (buttonSingleClicked()) {
@@ -190,6 +200,11 @@ void loop() {
     loop_mode_board();
   }
 
+}
+
+void draw_animate_pulse( Color color, Timer timer, unsigned int duration, byte cycles ){
+  byte pulseMapped = map(timer.getRemaining(), 0, duration, 0, 255*cycles);
+  setColor( dim(color, sin8_C(pulseMapped)) );
 }
 
 /**
