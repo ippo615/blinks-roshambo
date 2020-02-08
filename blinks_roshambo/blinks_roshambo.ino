@@ -20,6 +20,15 @@ Color COLOR_SELF_WIN_LOSE = WHITE;
 #define BRIGHTNESS_TIE 32
 #define BRIGHTNESS_LONELY 0
 
+byte BITMAP_ROCK[] = {255,255,255,255,255,0};
+byte BITMAP_PAPER[] = {0,255,255,0,255,255};
+byte BITMAP_SCISSOR[] = {255,0,255,0,255,0};
+byte* BITMAPS[] = {
+  (byte*)&BITMAP_ROCK,
+  (byte*)&BITMAP_PAPER,
+  (byte*)&BITMAP_SCISSOR,
+};
+
 /**
  * Definitions for Readability/Maintence
  */
@@ -137,15 +146,8 @@ void loop_mode_piece_select(){
   if (buttonSingleClicked()) {
     piece_type_index = (piece_type_index + 1) % N_PIECE_TYPES;
   }
-  if( PIECE_TYPES[piece_type_index] == ROCK ){
-    draw_shape_rock( TEAM_COLORS[team_index] );
-  }else
-  if( PIECE_TYPES[piece_type_index] == PAPER ){
-    draw_shape_paper( TEAM_COLORS[team_index] );
-  }else
-  if( PIECE_TYPES[piece_type_index] == SCISSOR )
-    draw_shape_scissor( TEAM_COLORS[team_index] );{
-  }
+  draw_bitmap( BITMAPS[PIECE_TYPES[piece_type_index]], TEAM_COLORS[team_index], 255 );
+
   if( buttonLongPressed() ){
     mode = MODE_PIECE_SELECT_FEEDBACK;
     timerFeedbackAnimation.set(DURATION_FEEDBACK_MS);
@@ -156,13 +158,7 @@ void loop_mode_piece_select_feedback(){
     mode = MODE_BOARD;
   }else{
     byte piece = values[piece_type_index];
-    if( piece == ROCK ){
-      draw_animate_pulse_function( draw_shape_rock, TEAM_COLORS[team_index], timerFeedbackAnimation, DURATION_FEEDBACK_MS, 2 );
-    }else if( piece == PAPER ){
-      draw_animate_pulse_function( draw_shape_paper, TEAM_COLORS[team_index], timerFeedbackAnimation, DURATION_FEEDBACK_MS, 2 );
-    }else if( piece == SCISSOR ){
-      draw_animate_pulse_function( draw_shape_scissor, TEAM_COLORS[team_index], timerFeedbackAnimation, DURATION_FEEDBACK_MS, 2 );
-    }
+    draw_animate_pulse_bitmap( BITMAPS[piece], TEAM_COLORS[team_index], timerFeedbackAnimation, DURATION_FEEDBACK_MS, 2 );
   }
 }
 void loop_mode_board(){
@@ -192,13 +188,7 @@ void loop_mode_board_info(){
     mode = MODE_BOARD;
   }else{
     byte piece = values[piece_type_index];
-    if( piece == ROCK ){
-      draw_animate_pulse_function( draw_shape_rock, TEAM_COLORS[team_index], timerFeedbackAnimation, DURATION_PIECE_INFO_MS, 1 );
-    }else if( piece == PAPER ){
-      draw_animate_pulse_function( draw_shape_paper, TEAM_COLORS[team_index], timerFeedbackAnimation, DURATION_PIECE_INFO_MS, 1 );
-    }else if( piece == SCISSOR ){
-      draw_animate_pulse_function( draw_shape_scissor, TEAM_COLORS[team_index], timerFeedbackAnimation, DURATION_PIECE_INFO_MS, 1 );
-    }
+    draw_animate_pulse_bitmap( BITMAPS[piece], TEAM_COLORS[team_index], timerFeedbackAnimation, DURATION_PIECE_INFO_MS, 1 );
   }
 }
 /**
@@ -234,9 +224,9 @@ void draw_animate_pulse( Color color, Timer timer, unsigned int duration, byte c
   byte pulseMapped = map(timer.getRemaining(), 0, duration, 0, 255*cycles);
   setColor( dim(color, sin8_C(pulseMapped)) );
 }
-void draw_animate_pulse_function( void *draw(Color), Color color, Timer timer, unsigned int duration, byte cycles ){
+void draw_animate_pulse_bitmap( byte* bitmap, Color color, Timer timer, unsigned int duration, byte cycles ){
   byte pulseMapped = map(timer.getRemaining(), 0, duration, 0, 255*cycles);
-  draw( dim(color, sin8_C(pulseMapped)) );
+  draw_bitmap( bitmap, color, sin8_C(pulseMapped) );
 }
 void draw_animate_fade_in_function( void *draw(Color), Color color, Timer timer, unsigned int duration ){
   byte pulseMapped = map(timer.getRemaining(), 0, duration, 0, 128);
@@ -246,29 +236,11 @@ void draw_animate_fade_out_function( void *draw(Color), Color color, Timer timer
   byte pulseMapped = map(timer.getRemaining(), 0, duration, 128, 0);
   draw( dim(color, sin8_C(pulseMapped)) );
 }
-void draw_shape_rock( Color color ){
-  setColorOnFace( color, 0 );
-  setColorOnFace( color, 1 );
-  setColorOnFace( color, 2 );
-  setColorOnFace( color, 3 );
-  setColorOnFace( color, 4 );
-  setColorOnFace( OFF, 5 );
-}
-void draw_shape_paper( Color color ){
-  setColorOnFace( OFF, 0 );
-  setColorOnFace( color, 1 );
-  setColorOnFace( color, 2 );
-  setColorOnFace( OFF, 3 );
-  setColorOnFace( color, 4 );
-  setColorOnFace( color, 5 );
-}
-void draw_shape_scissor( Color color ){
-  setColorOnFace( color, 0 );
-  setColorOnFace( OFF, 1 );
-  setColorOnFace( color, 2 );
-  setColorOnFace( OFF, 3 );
-  setColorOnFace( color, 4 );
-  setColorOnFace( OFF, 5 );
+void draw_bitmap( byte* bitmap, Color color, byte brightness ){
+  FOREACH_FACE( f ){
+    byte alpha = map( bitmap[f], 0, 255, 0, brightness );
+    setColorOnFace( dim(color,alpha), f );
+  }
 }
 
 /**
