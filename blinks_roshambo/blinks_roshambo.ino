@@ -9,9 +9,9 @@
 /**
  * Styles
  */
-#define N_TEAMS 7
+#define N_TEAMS 4
 Color TEAM_COLORS[] = {
-  RED,BLUE,YELLOW,MAGENTA,GREEN,ORANGE,CYAN
+  RED,BLUE,YELLOW,GREEN
 };
 Color COLOR_SELF_WIN_LOSE = WHITE;
 #define BRIGHTNESS_WON 255
@@ -94,54 +94,98 @@ type_data sent_data = {
 };
 setValueSentOnAllFaces( (byte*)&sent_data );
 */
-#define INFO_BUILD(TEAM,PIECE) ((TEAM<<2)|PIECE)
-#define INFO_GET_TEAM( INFO ) ((INFO&0b00011100)>>2)
+
+/**
+ * Data Communication Format
+ * We can send a number between 0 and 64. This means we have 6 bits
+ * of information.
+ * For pieces we have 4 types: 2 bits (full)
+ * For teams we have 4 types: 2 bits (full)
+ * For functions we have 3 types: 2 bits (not full)
+ */
+#define INFO_BUILD(TEAM,PIECE,FUNCTION) ( (FUNCTION<<4) | (TEAM<<2) | PIECE )
+#define INFO_GET_FUNCTION( INFO ) ((INFO&0b00110000)>>4)
+#define INFO_GET_TEAM( INFO ) ((INFO&0b00001100)>>2)
 #define INFO_GET_PIECE( INFO ) (INFO&0b00000011)
+
+enum {
+  FUNCTION_INFORM,
+  FUNCTION_SET_TEAM,
+  FUNCTION_CRUMPLE
+};
 
 /**
  * Initialization
  */
 void setup() {
   randomize();
-  //setValueSentOnAllFaces(VALUE_NOT_READY);
   team_index = getSerialNumberByte(0) % N_TEAMS;
 }
 
 /**
- * Loops for each game mode
+ * Mode: Start
+ * 
+ * Does nothing really. Maybe I should add some reset functionality here.
  */
 void loop_mode_start(){
-  // maybe add a delay here so that we dont get noise and can propagate team selection
   mode = MODE_TEAM_SELECT;
 }
+
+/**
+ * Mode: Team select
+ * 
+ * You can single click to cycle through the team colors. Once you have selected
+ * the team color - long press to lock it in. It will propagate the selection to
+ * any connected Blinks.
+ */
 void loop_mode_team_select(){
   if (buttonSingleClicked()) {
     team_index = (team_index + 1) % N_TEAMS;
   }
-  setColor( TEAM_COLORS[team_index] );
+
+  byte isActivated = false;
+  FOREACH_FACE(f){
+    if(!isValueReceivedOnFaceExpired(f)){
+      byte info = getLastValueReceivedOnFace(f);
+      if( INFO_GET_FUNCTION(info) == FUNCTION_SET_TEAM ){
+        isActivated = true;
+        team_index = INFO_GET_TEAM(info);
+      }
+    }
+  }
   if( buttonLongPressed() ){
+    isActivated = true;
+  }
+
+  setColor( TEAM_COLORS[team_index] );
+
+  if( isActivated ){
     mode = MODE_TEAM_PROPAGATE;
     timerFeedbackAnimation.set(DURATION_FEEDBACK_MS);
   }
-
-  /*
-   * // Listening seems to be buggy
-  FOREACH_FACE(f){
-    byte otherValue = getLastValueReceivedOnFace(f);
-    if( ! isValueReceivedOnFaceExpired(f) ){
-      team_index = otherValue;
-      mode = MODE_TEAM_PROPAGATE;
-    }
-  }
-  */
 }
+
+/**
+ * Mode: Team Propagate
+ * 
+ * It will animate itself to show the team that it is and will broadcast it's
+ * selection to neighboring Blinks.
+ */
 void loop_mode_team_propagate(){
   if( timerFeedbackAnimation.isExpired() ){
     mode = MODE_PIECE_SELECT;
   }else{
     draw_animate_pulse( TEAM_COLORS[team_index], timerFeedbackAnimation, DURATION_FEEDBACK_MS, 2 );
+    setValueSentOnAllFaces( INFO_BUILD( team_index, values[piece_type_index], FUNCTION_SET_TEAM ) );
   }
 }
+
+/**
+ * Mode: Piece Select
+ * 
+ * Single click to choose between Rock/Paper/Scissor/Crumple.
+ * Long click to lock selection.
+ */
 void loop_mode_piece_select(){
   if (buttonSingleClicked()) {
     piece_type_index = (piece_type_index + 1) % N_PIECE_TYPES;
@@ -153,6 +197,12 @@ void loop_mode_piece_select(){
     timerFeedbackAnimation.set(DURATION_FEEDBACK_MS);
   }
 }
+
+/**
+ * Mode: Piece Select Feedback
+ * 
+ * Animates the user's piece selection before entering board mode.
+ */
 void loop_mode_piece_select_feedback(){
   if( timerFeedbackAnimation.isExpired() ){
     mode = MODE_BOARD;
@@ -161,8 +211,16 @@ void loop_mode_piece_select_feedback(){
     draw_animate_pulse_bitmap( BITMAPS[piece], TEAM_COLORS[team_index], timerFeedbackAnimation, DURATION_FEEDBACK_MS, 2 );
   }
 }
+
+/**
+ * Mode: Board Mode
+ * 
+ * Shows winner/loser tie when placed next to another Blink.
+ * On single click - animates the piece to show if it is rock/paper/scissor.
+ * On long press - resets this Blink for a new round.
+ */
 void loop_mode_board(){
-  setValueSentOnAllFaces( INFO_BUILD( team_index, values[piece_type_index] ) );
+  setValueSentOnAllFaces( INFO_BUILD( team_index, values[piece_type_index], FUNCTION_INFORM ) );
   FOREACH_FACE(f){
     byte info = getLastValueReceivedOnFace(f);
     if( ! isValueReceivedOnFaceExpired(f) ){
@@ -183,6 +241,13 @@ void loop_mode_board(){
     timerFeedbackAnimation.set(DURATION_PIECE_INFO_MS);
   }
 }
+
+/**
+ * Mode: Board Info
+ * 
+ * Shows the piece (rock/paper/scissor) that this Blink is.
+ * Then returns to board mode.
+ */
 void loop_mode_board_info(){
   if( timerFeedbackAnimation.isExpired() ){
     mode = MODE_BOARD;
@@ -191,6 +256,7 @@ void loop_mode_board_info(){
     draw_animate_pulse_bitmap( BITMAPS[piece], TEAM_COLORS[team_index], timerFeedbackAnimation, DURATION_PIECE_INFO_MS, 1 );
   }
 }
+
 /**
  * Main loop
  */
@@ -245,24 +311,28 @@ void draw_bitmap( byte* bitmap, Color color, byte brightness ){
 
 /**
  * Given a result and a face, light the appropriate color on that face.
+ * 
+ * The idea is to be able to read the score directly from the game board. To
+ * do that we draw the following:
+ * If it's you vs you - draw white on both faces (otherwise you can win by
+ * simply putting your pieces together).
+ * Win: draw your color on both faces (+2 you)
+ * Lose: draw your opponents color on both faces (+2 opponent)
+ * Tie: draw your own color on your face (+1 you, +1 opponent)
  */
 void result_draw( byte result, byte other_team, byte this_team, byte face ){
-  if( result == RESULT_FACE_WON ){
-    if( other_team == this_team ){
-      setColorOnFace( dim( COLOR_SELF_WIN_LOSE, BRIGHTNESS_SELF ), face );
-    }else{
-      setColorOnFace( dim( TEAM_COLORS[team_index], BRIGHTNESS_WON ), face );
-    }
-  }else if( result == RESULT_FACE_LOST ){
-    if( other_team == this_team ){
-      setColorOnFace( dim( COLOR_SELF_WIN_LOSE, BRIGHTNESS_SELF ), face );
-    }else{
-      setColorOnFace( dim( TEAM_COLORS[other_team], BRIGHTNESS_WON ), face );
-    }
-  }else if( result == RESULT_FACE_TIE ){
-    setColorOnFace( dim( TEAM_COLORS[team_index], BRIGHTNESS_WON ), face );
+  if( other_team == this_team ){
+    setColorOnFace( dim( COLOR_SELF_WIN_LOSE, BRIGHTNESS_SELF ), face );
   }else{
-    setColorOnFace( dim( TEAM_COLORS[team_index], BRIGHTNESS_LONELY ), face );
+    if( result == RESULT_FACE_WON ){
+      setColorOnFace( dim( TEAM_COLORS[team_index], BRIGHTNESS_WON ), face );
+    }else if( result == RESULT_FACE_LOST ){
+      setColorOnFace( dim( TEAM_COLORS[other_team], BRIGHTNESS_WON ), face );
+    }else if( result == RESULT_FACE_TIE ){
+      setColorOnFace( dim( TEAM_COLORS[team_index], BRIGHTNESS_WON ), face );
+    }else{
+      setColorOnFace( dim( TEAM_COLORS[team_index], BRIGHTNESS_LONELY ), face );
+    }
   }
 }
 
