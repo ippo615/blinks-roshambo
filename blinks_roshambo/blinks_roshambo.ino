@@ -23,10 +23,12 @@ Color COLOR_SELF_WIN_LOSE = WHITE;
 byte BITMAP_ROCK[] = {255,255,255,255,255,0};
 byte BITMAP_PAPER[] = {0,255,255,0,255,255};
 byte BITMAP_SCISSOR[] = {255,0,255,0,255,0};
+byte BITMAP_CRUMPLE[] = {255,0,0,255,0,0};
 byte* BITMAPS[] = {
   (byte*)&BITMAP_ROCK,
   (byte*)&BITMAP_PAPER,
   (byte*)&BITMAP_SCISSOR,
+  (byte*)&BITMAP_CRUMPLE
 };
 
 /**
@@ -35,12 +37,14 @@ byte* BITMAPS[] = {
 enum {
   ROCK,
   PAPER,
-  SCISSOR
+  SCISSOR,
+  CRUMPLE
 };
 
-#define N_PIECE_TYPES 3
-byte PIECE_TYPES[] = {ROCK,PAPER,SCISSOR};
-byte values[] = {ROCK,PAPER,SCISSOR};
+#define N_PIECE_TYPES 4
+byte PIECE_TYPES[] = {ROCK,PAPER,SCISSOR,CRUMPLE};
+byte values[] = {ROCK,PAPER,SCISSOR,CRUMPLE};
+byte is_crumpled = false;
 
 enum {
   MODE_START,
@@ -49,7 +53,8 @@ enum {
   MODE_PIECE_SELECT,
   MODE_PIECE_SELECT_FEEDBACK,
   MODE_BOARD,
-  MODE_BOARD_INFO
+  MODE_BOARD_INFO,
+  MODE_CRUMPLE
 };
 
 #define DURATION_FEEDBACK_MS 800
@@ -57,11 +62,13 @@ enum {
 Timer timerFeedbackAnimation;
 
 
-
-#define RESULT_FACE_WON 0
-#define RESULT_FACE_LOST 1
-#define RESULT_FACE_TIE 2
-#define RESULT_FACE_LONELY 3
+enum {
+  RESULT_FACE_WON,
+  RESULT_FACE_LOST,
+  RESULT_FACE_TIE,
+  RESULT_FACE_LONELY,
+  RESULT_FACE_CRUMPLE
+};
 
 /**
  * Game State
@@ -128,6 +135,7 @@ void setup() {
  * Does nothing really. Maybe I should add some reset functionality here.
  */
 void loop_mode_start(){
+  is_crumpled = false;
   mode = MODE_TEAM_SELECT;
 }
 
@@ -218,15 +226,40 @@ void loop_mode_piece_select_feedback(){
  * Shows winner/loser tie when placed next to another Blink.
  * On single click - animates the piece to show if it is rock/paper/scissor.
  * On long press - resets this Blink for a new round.
+ * If this is a CRUMPLE piece - it will change all the papers to convert to rocks
+ * once it is attached.
  */
 void loop_mode_board(){
+
+  // If this pieces is a crumple piece then send a CRUMPLE message
+  // when it attached to something.
+  if( PIECE_TYPES[piece_type_index] == CRUMPLE ){
+    if( ! is_crumpled ){
+      if( ! isAlone() ){
+        mode = MODE_CRUMPLE;
+        setValueSentOnAllFaces( INFO_BUILD( team_index, values[piece_type_index], FUNCTION_CRUMPLE ) );
+        timerFeedbackAnimation.set(DURATION_FEEDBACK_MS);
+        return;
+      }
+    }
+  }
+  
   setValueSentOnAllFaces( INFO_BUILD( team_index, values[piece_type_index], FUNCTION_INFORM ) );
   FOREACH_FACE(f){
-    byte info = getLastValueReceivedOnFace(f);
     if( ! isValueReceivedOnFaceExpired(f) ){
-      infos[f] = info;
-      results[f] = result_lookup( values[piece_type_index], values[INFO_GET_PIECE(info)] );
-      result_draw( results[f], INFO_GET_TEAM(info), team_index, f );
+      byte info = getLastValueReceivedOnFace(f);
+      if( INFO_GET_FUNCTION( info ) == FUNCTION_INFORM ){
+        infos[f] = info;
+        results[f] = result_lookup( values[piece_type_index], values[INFO_GET_PIECE(info)] );
+        result_draw( results[f], INFO_GET_TEAM(info), team_index, f );
+      }else
+      if( INFO_GET_FUNCTION( info ) == FUNCTION_CRUMPLE ){
+        mode = MODE_CRUMPLE;
+        timerFeedbackAnimation.set(DURATION_FEEDBACK_MS);
+        if( piece_type_index == PAPER ){
+          piece_type_index = ROCK;
+        }
+      }
     }else{
       setColorOnFace( dim( TEAM_COLORS[team_index], BRIGHTNESS_LONELY ), f );
     }
@@ -240,6 +273,25 @@ void loop_mode_board(){
   if( buttonSingleClicked() ){
     mode = MODE_BOARD_INFO;
     timerFeedbackAnimation.set(DURATION_PIECE_INFO_MS);
+  }
+}
+
+/**
+ * Mode: Board Crumple Propagate
+ * 
+ * Animates the Crumpling state.
+ * During the first half of the animation, it will send the CRUMPLE
+ * instruction to other Blinks.
+ */
+void loop_mode_board_crumple(){
+  if( timerFeedbackAnimation.isExpired() ){
+    mode = MODE_BOARD;
+  }else if(timerFeedbackAnimation.getRemaining() > DURATION_FEEDBACK_MS / 2 ){
+    setValueSentOnAllFaces( INFO_BUILD( team_index, values[piece_type_index], FUNCTION_CRUMPLE ) );
+  }else{
+    is_crumpled = true;
+    draw_animate_pulse_bitmap( BITMAPS[piece_type_index], TEAM_COLORS[team_index], timerFeedbackAnimation, DURATION_FEEDBACK_MS, 2 );
+    setValueSentOnAllFaces( INFO_BUILD( team_index, values[piece_type_index], FUNCTION_INFORM ) );
   }
 }
 
@@ -283,6 +335,9 @@ void loop() {
   }else
   if( mode == MODE_BOARD_INFO ){
     loop_mode_board_info();
+  }else
+  if( mode == MODE_CRUMPLE ){
+    loop_mode_board_crumple();
   }
 
 }
@@ -331,6 +386,8 @@ void result_draw( byte result, byte other_team, byte this_team, byte face ){
       setColorOnFace( dim( TEAM_COLORS[other_team], BRIGHTNESS_WON ), face );
     }else if( result == RESULT_FACE_TIE ){
       setColorOnFace( dim( TEAM_COLORS[team_index], BRIGHTNESS_WON ), face );
+    }else if( result == RESULT_FACE_CRUMPLE ){
+      setColorOnFace( dim( COLOR_SELF_WIN_LOSE, BRIGHTNESS_SELF ), face );
     }else{
       setColorOnFace( dim( TEAM_COLORS[team_index], BRIGHTNESS_LONELY ), face );
     }
@@ -342,6 +399,9 @@ void result_draw( byte result, byte other_team, byte this_team, byte face ){
  * of the opponent's blick -- tell me if I won, lost or tied.
  */
 byte result_lookup( byte my_value, byte your_value ){
+  if( my_value == CRUMPLE or your_value == CRUMPLE ){
+    return RESULT_FACE_CRUMPLE;
+  }
   if( my_value == your_value ){
     return RESULT_FACE_TIE;
   }
